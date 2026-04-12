@@ -1,31 +1,30 @@
-
 import javax.swing.*;
-import javax.sound.sampled.Clip;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 
 public class WaveformVisualizer extends JPanel {
 
-    private static final int BAR_COUNT  = 40;
-    private static final int BAR_WIDTH  = 4;
+    private static final int BAR_COUNT  = 48;
+    private static final int BAR_WIDTH  = 5;
     private static final int BAR_GAP    = 3;
-    private static final int MAX_HEIGHT = 50;
+    private static final int MAX_HEIGHT = 52;
 
-    private float[] barHeights    = new float[BAR_COUNT];
-    private float[] barVelocities = new float[BAR_COUNT];
+    private float[] barHeights = new float[BAR_COUNT];
 
     private Timer   animTimer;
     private Timer   clockTimer;
-    private boolean isPlaying  = false;
 
-    private String padName    = "";
-    private String spaceName  = "";
-    private Color  accentColor = new Color(29, 158, 117);
+    private String  padName    = "";
+    private String  spaceName  = "";
+    private Color   accentColor = new Color(29, 158, 117);
 
-    private long lastPlayedAt = -1;
-    private Clip activeClip   = null;  // track the live clip
+    private long    lastPlayedAt = -1;
+    private boolean isPlaying    = false;
+    private float   currentRms   = 0f;  // latest amplitude from audio thread
+    private float   displayRms   = 0f;  // smoothed value used for rendering
 
     private JButton stopButton;
+    private Runnable onStop; // callback to stop the active PadSound
 
     public WaveformVisualizer() {
         setPreferredSize(new Dimension(0, 70));
@@ -35,13 +34,67 @@ public class WaveformVisualizer extends JPanel {
         stopButton = buildStopButton();
         add(stopButton, BorderLayout.EAST);
 
-        animTimer = new Timer(16, e -> { updateBars(); repaint(); });
+        // animation tick — shift bars and push new value
+        animTimer = new Timer(40, e -> {  // ~25fps is plenty
+            if (isPlaying) {
+                // smooth the RMS so bars don't flicker
+                displayRms += (currentRms - displayRms) * 0.4f;
+                pushBar(displayRms * 4);
+            } else {
+                // decay all bars toward zero
+                boolean anyLeft = false;
+                for (int i = 0; i < BAR_COUNT; i++) {
+                    barHeights[i] *= 0.82f;
+                    if (barHeights[i] > 0.5f) anyLeft = true;
+                }
+                if (!anyLeft) java.util.Arrays.fill(barHeights, 0f);
+            }
+            repaint();
+        });
         animTimer.start();
 
         clockTimer = new Timer(1000, e -> repaint());
         clockTimer.start();
 
-        updateStopButtonState();
+        updateStopButton();
+    }
+
+    // called from the audio thread — just store, don't draw here
+    public void feedAmplitude(float rms) {
+        this.currentRms = rms;
+    }
+
+    // push a new bar onto the right, shift everything left
+    private void pushBar(float rms) {
+        System.arraycopy(barHeights, 1, barHeights, 0, BAR_COUNT - 1);
+        barHeights[BAR_COUNT - 1] = Math.min(MAX_HEIGHT, rms * MAX_HEIGHT);
+    }
+
+    public void notifyPlay(String padName, String spaceName,
+                           Color accentColor, Runnable onStop) {
+        this.padName     = padName;
+        this.spaceName   = spaceName;
+        this.accentColor = accentColor;
+        this.onStop      = onStop;
+        this.isPlaying   = true;
+        this.lastPlayedAt = System.currentTimeMillis();
+        updateStopButton();
+    }
+
+    public void notifyStop() {
+        isPlaying  = false;
+        currentRms = 0f;
+        updateStopButton();
+    }
+
+    private void stopAll() {
+        if (onStop != null) onStop.run();
+        notifyStop();
+    }
+
+    private void updateStopButton() {
+        stopButton.setEnabled(isPlaying);
+        stopButton.repaint();
     }
 
     private JButton buildStopButton() {
@@ -51,19 +104,14 @@ public class WaveformVisualizer extends JPanel {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                         RenderingHints.VALUE_ANTIALIAS_ON);
-
-                // background circle
-                boolean enabled = isEnabled();
-                g2.setColor(enabled ? new Color(200, 60, 60) : new Color(60, 60, 60));
+                boolean en = isEnabled();
+                g2.setColor(en ? new Color(200, 60, 60) : new Color(55, 55, 55));
                 g2.fillOval(4, 4, getWidth() - 8, getHeight() - 8);
-
-                // stop square icon
                 int sq = 14;
                 int cx = getWidth()  / 2 - sq / 2;
                 int cy = getHeight() / 2 - sq / 2;
-                g2.setColor(enabled ? Color.WHITE : new Color(100, 100, 100));
+                g2.setColor(en ? Color.WHITE : new Color(90, 90, 90));
                 g2.fillRect(cx, cy, sq, sq);
-
                 g2.dispose();
             }
         };
@@ -72,73 +120,20 @@ public class WaveformVisualizer extends JPanel {
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btn.setToolTipText("Stop");
-
+        btn.setEnabled(false);
         btn.addActionListener(e -> stopAll());
-
         return btn;
-    }
-
-    // called by PadButton when sound starts
-    public void notifyPlay(String padName, String spaceName, Color accentColor, Clip clip) {
-        this.padName      = padName;
-        this.spaceName    = spaceName;
-        this.accentColor  = accentColor;
-        this.activeClip   = clip;
-        this.isPlaying    = true;
-        this.lastPlayedAt = System.currentTimeMillis();
-
-        for (int i = 0; i < BAR_COUNT; i++) {
-            float center = BAR_COUNT / 2f;
-            float dist   = Math.abs(i - center) / center;
-            barHeights[i] = MAX_HEIGHT * (1f - dist * 0.6f)
-                    * (0.6f + (float) Math.random() * 0.4f);
-        }
-
-        updateStopButtonState();
-    }
-
-    public void notifyStop() {
-        isPlaying  = false;
-        activeClip = null;
-        updateStopButtonState();
-    }
-
-    // hard stop — called by the button
-    public void stopAll() {
-        if (activeClip != null && activeClip.isRunning()) {
-            activeClip.stop();
-            activeClip.setFramePosition(0);
-        }
-        notifyStop();
-    }
-
-    private void updateStopButtonState() {
-        stopButton.setEnabled(isPlaying);
-        stopButton.repaint();
-    }
-
-    private void updateBars() {
-        for (int i = 0; i < BAR_COUNT; i++) {
-            if (isPlaying) {
-                float target = MAX_HEIGHT * (0.3f + (float) Math.random() * 0.7f);
-                barHeights[i] += (target - barHeights[i]) * 0.15f;
-                barHeights[i]  = Math.max(3, Math.min(MAX_HEIGHT, barHeights[i]));
-            } else {
-                barHeights[i] *= 0.88f;
-                if (barHeights[i] < 1) barHeights[i] = 0;
-            }
-        }
     }
 
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g.create();
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON);
 
         int panelH = getHeight();
-        int panelW = getWidth() - 70; // reserve space for stop button
+        int panelW = getWidth() - 70;
         int midY   = panelH / 2;
 
         // accent stripe
@@ -151,7 +146,7 @@ public class WaveformVisualizer extends JPanel {
         g2.drawString(padName.isEmpty() ? "—" : padName, 14, midY - 4);
 
         // space name
-        g2.setColor(new Color(120, 120, 120));
+        g2.setColor(new Color(110, 110, 110));
         g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
         g2.drawString(spaceName, 14, midY + 12);
 
@@ -159,36 +154,35 @@ public class WaveformVisualizer extends JPanel {
         int barsStartX = 110;
         for (int i = 0; i < BAR_COUNT; i++) {
             float h     = barHeights[i];
-            float alpha = 0.3f + (h / MAX_HEIGHT) * 0.7f;
+            if (h < 0.5f) continue;
+            float alpha = 0.25f + (h / MAX_HEIGHT) * 0.75f;
             g2.setColor(new Color(
                     accentColor.getRed()   / 255f,
                     accentColor.getGreen() / 255f,
                     accentColor.getBlue()  / 255f,
-                    alpha
+                    Math.min(1f, alpha)
             ));
             int x    = barsStartX + i * (BAR_WIDTH + BAR_GAP);
             int barH = Math.max(2, (int) h);
+            // mirror above and below center
             g2.fill(new RoundRectangle2D.Float(
                     x, midY - barH / 2f, BAR_WIDTH, barH, 2, 2));
         }
 
-        // last played timer
+        // last played
         if (lastPlayedAt > 0) {
-            long elapsed  = (System.currentTimeMillis() - lastPlayedAt) / 1000;
-            String timeStr = elapsed < 60
-                    ? elapsed + "s ago"
-                    : (elapsed / 60) + "m ago";
+            long   elapsed = (System.currentTimeMillis() - lastPlayedAt) / 1000;
+            String timeStr = elapsed < 60 ? elapsed + "s ago" : (elapsed / 60) + "m ago";
 
-            g2.setColor(new Color(100, 100, 100));
+            g2.setColor(new Color(90, 90, 90));
             g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
-            String label = "last played";
-            int labelW   = g2.getFontMetrics().stringWidth(label);
-            g2.drawString(label, panelW - labelW - 16, midY - 4);
+            int lw = g2.getFontMetrics().stringWidth("last played");
+            g2.drawString("last played", panelW - lw - 16, midY - 4);
 
             g2.setColor(Color.WHITE);
             g2.setFont(new Font("SansSerif", Font.BOLD, 18));
-            int timeW = g2.getFontMetrics().stringWidth(timeStr);
-            g2.drawString(timeStr, panelW - timeW - 16, midY + 14);
+            int tw = g2.getFontMetrics().stringWidth(timeStr);
+            g2.drawString(timeStr, panelW - tw - 16, midY + 14);
         }
 
         g2.dispose();

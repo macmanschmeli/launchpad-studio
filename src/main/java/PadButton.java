@@ -13,6 +13,7 @@ import java.awt.dnd.DropTargetAdapter;
 import java.awt.dnd.DropTargetDragEvent;
 import java.awt.dnd.DropTargetDropEvent;
 import java.awt.dnd.DropTargetEvent;
+import java.io.File;
 
 public class PadButton extends JButton {
 
@@ -27,10 +28,13 @@ public class PadButton extends JButton {
     private int arc = 20;
     private WaveformVisualizer visualizer;
     private Space space;
-    private Clip clip;
+    private String soundFilePath  = null;
+    private double startTimestamp = 0.0;
+
+    public String getSoundFilePath()  { return soundFilePath; }
+    public double getStartTimestamp() { return startTimestamp; }
 
     private GroupManager groupManager;
-    private java.util.List<javax.sound.sampled.LineListener> cachedListeners = new java.util.ArrayList<>();
 
     public PadButton(String label, int padIndex, GroupManager groupManager) {
         super(label);
@@ -43,26 +47,23 @@ public class PadButton extends JButton {
         setForeground(Color.WHITE);
         setFont(new Font("SansSerif", Font.BOLD, 12));
 
-        // action listener goes here, replacing the old one
         addActionListener(e -> {
             if (sound != null) {
+                // feed real amplitude values into the visualizer
+                sound.setAmplitudeListener(rms -> {
+                    if (visualizer != null) visualizer.feedAmplitude(rms);
+                });
+
                 sound.play();
-                this.clip = sound.getClip();
 
-                for (javax.sound.sampled.LineListener l : cachedListeners) {
-                    clip.removeLineListener(l);
+                if (visualizer != null) {
+                    visualizer.notifyPlay(
+                            getText(),
+                            space != null ? space.getName() : "",
+                            space != null ? space.getColor() : new Color(29, 158, 117),
+                            () -> sound.stop()  // stop callback for the stop button
+                    );
                 }
-                cachedListeners.clear();
-
-                javax.sound.sampled.LineListener listener = event -> {
-                    if (event.getType() == javax.sound.sampled.LineEvent.Type.STOP) {
-                        SwingUtilities.invokeLater(() -> {
-                            if (visualizer != null) visualizer.notifyStop();
-                        });
-                    }
-                };
-                cachedListeners.add(listener);
-                clip.addLineListener(listener);
             }
             flashActive();
         });
@@ -72,24 +73,26 @@ public class PadButton extends JButton {
         setupContextMenu();
     }
 
+    public void setSoundFromFile(File file, double startSeconds) {
+        try {
+            PadSound sound = PadSound.fromFile(file, startSeconds);
+            this.sound          = sound;
+            this.soundFilePath  = file.getAbsolutePath();
+            this.startTimestamp = startSeconds;
+        } catch (Exception e) {
+            System.err.println("Could not load sound: " + e.getMessage());
+        }
+    }
+
     public void setVisualizer(WaveformVisualizer visualizer, Space space) {
         this.visualizer = visualizer;
         this.space      = space;
     }
 
-    public void setClip(Clip clip) {
-        this.clip = clip;
-    }
 
     private void flashActive() {
         currentColor = activeColor;
         repaint();
-
-        if (visualizer != null) {
-            visualizer.notifyPlay(getText(), space.getName(), space.getColor(), clip);
-        }
-
-        // only revert the button color after 150ms — do NOT notify the visualizer here
         Timer t = new Timer(150, e -> {
             currentColor = baseColor;
             repaint();

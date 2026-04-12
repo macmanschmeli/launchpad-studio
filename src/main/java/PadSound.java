@@ -1,76 +1,155 @@
-
 import javax.sound.sampled.*;
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.InputStream;
+import java.io.*;
 
 public class PadSound {
 
-    private Clip   clip;
-    private long   startFrame = 0; // frame to seek to before playing
+    private AudioInputStream pcmStream;
+    private AudioFormat      format;
+    private File             file;
+    private double           startSeconds;
+    private SourceDataLine   line;
+    private Thread           playThread;
+    private boolean          playing = false;
 
-    // load from a bundled resource
-    public static PadSound fromResource(String filename) throws Exception {
-        PadSound ps = new PadSound();
-        InputStream is = PadSound.class.getResourceAsStream("/sounds/" + filename);
-        AudioInputStream audio = AudioSystem.getAudioInputStream(
-                new BufferedInputStream(is));
-        ps.clip = AudioSystem.getClip();
-        ps.clip.open(audio);
+    private AmplitudeListener amplitudeListener;
+
+    public interface AmplitudeListener {
+        void onAmplitude(float rms); // 0.0 to 1.0
+    }
+
+    public static PadSound fromFile(File file, double startSeconds) throws Exception {
+        PadSound ps     = new PadSound();
+        ps.file         = file;
+        ps.startSeconds = startSeconds;
+        ps.reloadStream();
         return ps;
     }
 
-    // load from a user-picked file
-    public static PadSound fromFile(File file, double startSeconds) throws Exception {
-        PadSound ps = new PadSound();
+    private void reloadStream() throws Exception {
+        AudioInputStream raw    = AudioSystem.getAudioInputStream(file);
+        AudioFormat      rawFmt = raw.getFormat();
 
-        AudioInputStream rawStream  = AudioSystem.getAudioInputStream(file);
-        AudioFormat      rawFormat  = rawStream.getFormat();
-
-        // if it's MP3 (or any non-PCM format), transcode to PCM
-        AudioInputStream pcmStream;
-        if (rawFormat.getEncoding() != AudioFormat.Encoding.PCM_SIGNED) {
-            AudioFormat pcmFormat = new AudioFormat(
+        // transcode to PCM signed if needed (e.g. MP3)
+        if (rawFmt.getEncoding() != AudioFormat.Encoding.PCM_SIGNED) {
+            AudioFormat pcmFmt = new AudioFormat(
                     AudioFormat.Encoding.PCM_SIGNED,
-                    rawFormat.getSampleRate(),
+                    rawFmt.getSampleRate(),
                     16,
-                    rawFormat.getChannels(),
-                    rawFormat.getChannels() * 2,
-                    rawFormat.getSampleRate(),
+                    rawFmt.getChannels(),
+                    rawFmt.getChannels() * 2,
+                    rawFmt.getSampleRate(),
                     false
             );
-            pcmStream = AudioSystem.getAudioInputStream(pcmFormat, rawStream);
+            pcmStream = AudioSystem.getAudioInputStream(pcmFmt, raw);
         } else {
-            pcmStream = rawStream;
+            pcmStream = raw;
         }
 
-        ps.clip = AudioSystem.getClip();
-        ps.clip.open(pcmStream);
+        format = pcmStream.getFormat();
 
+        // skip to start timestamp
         if (startSeconds > 0) {
-            float fps     = ps.clip.getFormat().getFrameRate();
-            ps.startFrame = Math.min(
-                    (long)(startSeconds * fps),
-                    ps.clip.getFrameLength() - 1
-            );
+            long bytesToSkip = (long)(startSeconds
+                    * format.getSampleRate()
+                    * format.getFrameSize());
+            pcmStream.skip(bytesToSkip);
         }
+    }
 
-        return ps;
+    public void setAmplitudeListener(AmplitudeListener listener) {
+        this.amplitudeListener = listener;
     }
 
     public void play() {
-        if (clip == null) return;
-        clip.stop();
-        clip.setFramePosition((int) startFrame);
-        clip.start();
-    }
+        stop(); // stop any current playback first
 
-    public void stop() {
-        if (clip != null) {
-            clip.stop();
-            clip.setFramePosition((int) startFrame);
+        try {
+            reloadStream(); // rewind by reloading
+
+            DataLine.Info info = new DataLine.Info(SourceDataLine.class, format);
+            line = (SourceDataLine) AudioSystem.getLine(info);
+            line.open(format);
+            line.start();
+            playing = true;
+
+            playThread = new Thread(() -> {
+                byte[] buffer = new byte[1024];
+                int    bytesRead;
+                try {
+                    while (playing && (bytesRead = pcmStream.read(buffer, 0, buffer.length)) != -1) {
+                        line.write(buffer, 0, bytesRead);
+
+                        // compute RMS amplitude from this buffer chunk
+                        if (amplitudeListener != null) {
+                            float rms = computeRms(buffer, bytesRead, format);
+                            amplitudeListener.onAmplitude(rms);
+                        }
+                    }
+                } catch (IOException e) {
+                    System.err.println("Playback error: " + e.getMessage());
+                } finally {
+                    if (playing) {
+                        line.drain();
+                        line.stop();
+                    }
+                    line.close();
+                    playing = false;
+                    if (amplitudeListener != null) {
+                        amplitudeListener.onAmplitude(0f);
+                    }
+                }
+            }, "audio-playback");
+
+            playThread.setDaemon(true);
+            playThread.start();
+
+        } catch (Exception e) {
+            System.err.println("Could not start playback: " + e.getMessage());
         }
     }
 
-    public Clip getClip() { return clip; }
+    public void stop() {
+        playing = false;
+        if (line != null && line.isOpen()) {
+            line.stop();
+            line.flush();
+            line.close();
+        }
+        if (playThread != null) {
+            playThread.interrupt();
+        }
+    }
+
+    public boolean isPlaying() { return playing; }
+
+    // RMS = root mean square of all samples in the buffer
+    private float computeRms(byte[] buffer, int length, AudioFormat fmt) {
+        int    sampleSize = fmt.getSampleSizeInBits() / 8;
+        int    channels   = fmt.getChannels();
+        boolean bigEndian = fmt.isBigEndian();
+        int    numSamples = length / sampleSize;
+
+        double sumSq = 0;
+        for (int i = 0; i + sampleSize <= length; i += sampleSize) {
+            int sample;
+            if (sampleSize == 2) {
+                // 16-bit sample
+                sample = bigEndian
+                        ? (buffer[i] << 8)     | (buffer[i + 1] & 0xFF)
+                        : (buffer[i + 1] << 8) | (buffer[i]     & 0xFF);
+            } else {
+                // 8-bit sample
+                sample = buffer[i] - 128;
+            }
+            sumSq += (double) sample * sample;
+        }
+
+        double rms    = Math.sqrt(sumSq / Math.max(1, numSamples));
+        double maxVal = sampleSize == 2 ? 32768.0 : 128.0;
+        return (float) Math.min(1.0, rms / maxVal);
+    }
+
+    // no longer needed but kept for ConfigManager compatibility
+    public String getFilePath()      { return file != null ? file.getAbsolutePath() : null; }
+    public double getStartSeconds()  { return startSeconds; }
 }

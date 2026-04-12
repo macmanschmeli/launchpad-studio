@@ -1,5 +1,6 @@
 import javax.swing.*;
 import java.awt.*;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -14,52 +15,82 @@ public class Main {
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            spaceManager = new SpaceManager();
 
-            // pad area on the right — replaced when switching spaces
-            padArea    = new JPanel();
-            mainWrapper = new JPanel(new BorderLayout());
+            spaceManager = new SpaceManager();
+            visualizer   = new WaveformVisualizer();
+            padArea      = new JPanel();
+            mainWrapper  = new JPanel(new BorderLayout());
             mainWrapper.setBackground(new Color(20, 20, 20));
             mainWrapper.add(padArea, BorderLayout.CENTER);
 
-            // sidebar
             spaceListPanel = new SpaceListPanel(spaceManager, Main::showSpace);
 
-            // frame
-            JFrame frame = new JFrame("Launchpad Studio");
-            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            // restore saved config if it exists
+            restoreConfig();
 
-// use a layered pane so the visualizer always renders on top
-            JLayeredPane layered = frame.getLayeredPane();
+            JLayeredPane layered = new JLayeredPane();
 
-// main content at the default layer
             JPanel content = new JPanel(new BorderLayout());
             content.add(spaceListPanel, BorderLayout.WEST);
             content.add(mainWrapper,    BorderLayout.CENTER);
-            content.setBounds(0, 0, 820, 580);
-            layered.add(content, JLayeredPane.DEFAULT_LAYER);
 
-// visualizer pinned to the bottom at a higher layer
-            visualizer.setBounds(0, 580, 820, 70);
-            layered.add(visualizer, JLayeredPane.PALETTE_LAYER);
+            JFrame frame = new JFrame("Launchpad Studio");
+            frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
 
-// keep bounds in sync when the window is resized
-            frame.addComponentListener(new java.awt.event.ComponentAdapter() {
-                public void componentResized(java.awt.event.ComponentEvent e) {
-                    int w = frame.getContentPane().getWidth();
-                    int h = frame.getContentPane().getHeight();
-                    content.setBounds(0, 0, w, h - 70);
-                    visualizer.setBounds(0, h - 70, w, 70);
+            // save on close
+            frame.addWindowListener(new java.awt.event.WindowAdapter() {
+                public void windowClosing(java.awt.event.WindowEvent e) {
+                    ConfigManager.save(spaceManager);
+                    System.exit(0);
                 }
             });
 
+            frame.setLayout(new BorderLayout());
+            frame.add(spaceListPanel, BorderLayout.WEST);
+            frame.add(mainWrapper,    BorderLayout.CENTER);
+            frame.add(visualizer,     BorderLayout.SOUTH);
             frame.setSize(820, 650);
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
 
-            // select the first space
-            spaceListPanel.selectSpace(spaceManager.getSpaces().get(0));
+            // select first space after UI is built
+            if (!spaceManager.getSpaces().isEmpty()) {
+                spaceListPanel.selectSpace(spaceManager.getSpaces().get(0));
+            }
         });
+    }
+
+    private static void restoreConfig() {
+        ConfigManager.AppConfig config = ConfigManager.load();
+        if (config == null || config.spaces.isEmpty()) return;
+
+        // clear the default space created by SpaceManager constructor
+        spaceManager.getSpaces().clear();
+
+        for (ConfigManager.SpaceData sd : config.spaces) {
+            Color color = new Color(sd.colorRgb, true);
+            Space space = new Space(sd.name, color);
+
+            for (ConfigManager.PadData pd : sd.pads) {
+                PadButton btn = new PadButton(pd.name, 0, null);
+                btn.setBaseColor(color.darker());
+                btn.setVisualizer(visualizer, space);
+
+                if (pd.soundFilePath != null) {
+                    File file = new File(pd.soundFilePath);
+                    if (file.exists()) {
+                        btn.setSoundFromFile(file, pd.startTimestamp);
+                    } else {
+                        System.err.println("Sound file missing: " + pd.soundFilePath);
+                    }
+                }
+
+                space.addPad(btn);
+            }
+
+            spaceManager.getSpaces().add(space);
+            spaceListPanel.refresh();
+        }
     }
 
     private static void showSpace(Space space) {
@@ -119,8 +150,9 @@ public class Main {
 
             if (cfg.soundFile != null) {
                 try {
-                    PadSound sound = PadSound.fromFile(cfg.soundFile, cfg.startTimestamp);
-                    btn.setSound(sound);
+                    //PadSound sound = PadSound.fromFile(cfg.soundFile, cfg.startTimestamp);
+                    //btn.setSound(sound);
+                    btn.setSoundFromFile(cfg.soundFile, cfg.startTimestamp);
                 } catch (Exception ex) {
                     JOptionPane.showMessageDialog(mainWrapper,
                             "Could not load sound: " + ex.getMessage(),
