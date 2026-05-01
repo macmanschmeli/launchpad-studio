@@ -53,13 +53,22 @@ public class PadSound {
         }
 
         format = pcmStream.getFormat();
-
-        // skip to start timestamp
         if (startSeconds > 0) {
             long bytesToSkip = (long)(startSeconds
                     * format.getSampleRate()
                     * format.getFrameSize());
-            pcmStream.skip(bytesToSkip);
+
+            byte[] dummyBuffer = new byte[4096];
+            long totalRead = 0;
+
+            while (totalRead < bytesToSkip) {
+                // Berechne, wie viel noch gelesen werden muss (maximal Puffergröße)
+                int toRead = (int) Math.min(dummyBuffer.length, bytesToSkip - totalRead);
+                int read = pcmStream.read(dummyBuffer, 0, toRead);
+
+                if (read == -1) break; // Datei zu Ende
+                totalRead += read;
+            }
         }
     }
 

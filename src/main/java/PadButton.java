@@ -85,7 +85,7 @@ public class PadButton extends JButton {
         try {
             PadSound sound = PadSound.fromFile(file, startSeconds);
             this.sound          = sound;
-            this.soundFilePath  = file.getAbsolutePath();
+            this.soundFilePath  = file.getCanonicalPath();
             this.startTimestamp = startSeconds;
         } catch (Exception e) {
             System.err.println("Could not load sound: " + e.getMessage());

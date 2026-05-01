@@ -1,0 +1,86 @@
+{
+  "spaces": [
+    {
+      "name": "Standard",
+      "colorRgb": -12675569,
+      "pads": [
+        {
+          "name": "Major Tom",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\majortom.mp3",
+          "startTimestamp": 53.0
+        },
+        {
+          "name": "Ace Ace",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\ACE.mp3",
+          "startTimestamp": 1.0
+        },
+        {
+          "name": "Here comes the boom",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\Boom.mp3",
+          "startTimestamp": 1.0
+        },
+        {
+          "name": "Monster Block",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\MonsterBlock.mp3",
+          "startTimestamp": 1.0
+        },
+        {
+          "name": "This is Volleyball",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\thisIsVolleyball.mp3",
+          "startTimestamp": 0.5
+        },
+        {
+          "name": "Tick Tick Boom",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\TickTick.mp3",
+          "startTimestamp": 13.0
+        },
+        {
+          "name": "Hands up in the Air",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\HandsUp.mp3",
+          "startTimestamp": 1.0
+        },
+        {
+          "name": "Vienna",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\Vienna.mp3",
+          "startTimestamp": 43.0
+        },
+        {
+          "name": "Can\u0027t touch this",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\canttouchthis.mp3",
+          "startTimestamp": 50.0
+        },
+        {
+          "name": "You shall not pass",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\nopass.mp3",
+          "startTimestamp": 2.0
+        },
+        {
+          "name": "Der Zug hat keine Bremse",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\zug.mp3",
+          "startTimestamp": 0.0
+        },
+        {
+          "name": "Allee Allee",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\alee.mp3",
+          "startTimestamp": 1.0
+        },
+        {
+          "name": "FE!N",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\FE!N.mp3",
+          "startTimestamp": 4.0
+        }
+      ]
+    },
+    {
+      "name": "Songs",
+      "colorRgb": -12675569,
+      "pads": [
+        {
+          "name": "Erinner mich",
+          "soundFilePath": "C:\\Users\\schme\\Desktop\\launchpad\\launchpad\\sounds\\feiermich.mp3",
+          "startTimestamp": 53.0
+        }
+      ]
+    }
+  ]
+}
