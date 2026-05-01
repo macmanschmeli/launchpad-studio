@@ -15,6 +15,13 @@ import java.awt.dnd.DropTargetDropEvent;
 import java.awt.dnd.DropTargetEvent;
 import java.io.File;
 
+/**
+ * A rounded, custom-painted Swing button representing a single
+ * launchpad pad. Handles its own visual state (idle, active flash),
+ * drag-and-drop group assignment, right-click context menu,
+ * sound playback, and amplitude reporting to the WaveformVisualizer.
+ * Must be constructed on the EDT.
+ */
 public class PadButton extends JButton {
 
     private static final DataFlavor PAD_FLAVOR =
@@ -50,6 +57,7 @@ public class PadButton extends JButton {
         addActionListener(e -> {
             if (sound != null) {
                 // feed real amplitude values into the visualizer
+                visualizer.stopAll();
                 sound.setAmplitudeListener(rms -> {
                     if (visualizer != null) visualizer.feedAmplitude(rms);
                 });
@@ -182,7 +190,7 @@ public class PadButton extends JButton {
                 .contains(x, y);
     }
 
-    public void setSound(PadSound sound) { this.sound = sound; }
+    public PadSound getSound() { return sound; }
 
     public void setBaseColor(Color color) {
         this.baseColor    = color;

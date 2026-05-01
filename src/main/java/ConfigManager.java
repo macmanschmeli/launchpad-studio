@@ -5,6 +5,13 @@ import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Handles persistence of the application configuration.
+ * Saves and loads the full space/pad layout as a JSON file
+ * written to the working directory alongside the JAR.
+ * Separates deserialization (load) from object reconstruction
+ * (restore) so config can be validated before being applied.
+ */
 public class ConfigManager {
 
     // --- data classes that mirror the runtime model ---

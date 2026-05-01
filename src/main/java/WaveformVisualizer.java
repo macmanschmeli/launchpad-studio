@@ -1,6 +1,7 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
+import java.util.ArrayList;
 
 public class WaveformVisualizer extends JPanel {
 
@@ -26,6 +27,14 @@ public class WaveformVisualizer extends JPanel {
     private JButton stopButton;
     private Runnable onStop; // callback to stop the active PadSound
 
+    /**
+     * A fixed-height panel docked at the bottom of the main window
+     * that visualizes audio playback in real time. Displays a scrolling
+     * bar graph driven by RMS amplitude values fed from PadSound,
+     * the name and space of the last triggered pad, a "last played"
+     * elapsed timer, and a stop button that halts the active sound.
+     * All rendering happens on the EDT via a Swing Timer at ~25fps.
+     */
     public WaveformVisualizer() {
         setPreferredSize(new Dimension(0, 70));
         setBackground(new Color(18, 18, 18));
@@ -87,7 +96,17 @@ public class WaveformVisualizer extends JPanel {
         updateStopButton();
     }
 
-    private void stopAll() {
+    public void stopAll() {
+        SpaceManager spaceManager = SpaceManager.getInstance();
+        java.util.List<Space> spaces = spaceManager.getSpaces();
+        for (Space space : spaces){
+            java.util.List<PadButton> buttons = space.getPads();
+            for (PadButton button : buttons){
+                PadSound sound = button.getSound();
+                if (sound != null)
+                    sound.stop();
+            }
+        }
         if (onStop != null) onStop.run();
         notifyStop();
     }
@@ -125,6 +144,10 @@ public class WaveformVisualizer extends JPanel {
         return btn;
     }
 
+    /**
+     * Main paint entry point. Delegates each visual section to a
+     * dedicated method and disposes the graphics context when done.
+     */
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -136,25 +159,56 @@ public class WaveformVisualizer extends JPanel {
         int panelW = getWidth() - 70;
         int midY   = panelH / 2;
 
-        // accent stripe
+        drawAccentStripe(g2, panelH);
+        drawPadLabels(g2, midY);
+        drawWaveformBars(g2, midY);
+        drawLastPlayed(g2, panelW, midY);
+
+        g2.dispose();
+    }
+
+    /**
+     * Draws the 3px colored stripe on the left edge using the current accent color.
+     *
+     * @param g2     graphics context
+     * @param panelH full panel height for stripe extent
+     */
+    private void drawAccentStripe(Graphics2D g2, int panelH) {
         g2.setColor(accentColor);
         g2.fillRect(0, 0, 3, panelH);
+    }
 
-        // pad name
+    /**
+     * Draws the pad name and space name labels on the left side.
+     * Shows "—" when no pad has been triggered yet.
+     *
+     * @param g2   graphics context
+     * @param midY vertical center of the panel
+     */
+    private void drawPadLabels(Graphics2D g2, int midY) {
         g2.setColor(Color.WHITE);
         g2.setFont(new Font("SansSerif", Font.BOLD, 13));
         g2.drawString(padName.isEmpty() ? "—" : padName, 14, midY - 4);
 
-        // space name
         g2.setColor(new Color(110, 110, 110));
         g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
         g2.drawString(spaceName, 14, midY + 12);
+    }
 
-        // waveform bars
+    /**
+     * Draws the scrolling waveform bar graph.
+     * Bar alpha scales with height so quiet bars fade out naturally.
+     * Bars shorter than 0.5px are skipped entirely.
+     *
+     * @param g2   graphics context
+     * @param midY vertical center used to mirror bars above and below
+     */
+    private void drawWaveformBars(Graphics2D g2, int midY) {
         int barsStartX = 110;
         for (int i = 0; i < BAR_COUNT; i++) {
-            float h     = barHeights[i];
+            float h = barHeights[i];
             if (h < 0.5f) continue;
+
             float alpha = 0.25f + (h / MAX_HEIGHT) * 0.75f;
             g2.setColor(new Color(
                     accentColor.getRed()   / 255f,
@@ -162,29 +216,39 @@ public class WaveformVisualizer extends JPanel {
                     accentColor.getBlue()  / 255f,
                     Math.min(1f, alpha)
             ));
+
             int x    = barsStartX + i * (BAR_WIDTH + BAR_GAP);
             int barH = Math.max(2, (int) h);
-            // mirror above and below center
             g2.fill(new RoundRectangle2D.Float(
                     x, midY - barH / 2f, BAR_WIDTH, barH, 2, 2));
         }
+    }
 
-        // last played
-        if (lastPlayedAt > 0) {
-            long   elapsed = (System.currentTimeMillis() - lastPlayedAt) / 1000;
-            String timeStr = elapsed < 60 ? elapsed + "s ago" : (elapsed / 60) + "m ago";
+    /**
+     * Draws the "last played" label and elapsed time on the right side.
+     * Does nothing if no sound has been played yet in this session.
+     * Time is shown as seconds for under a minute, minutes otherwise.
+     *
+     * @param g2     graphics context
+     * @param panelW usable panel width (total width minus stop button width)
+     * @param midY   vertical center of the panel
+     */
+    private void drawLastPlayed(Graphics2D g2, int panelW, int midY) {
+        if (lastPlayedAt <= 0) return;
 
-            g2.setColor(new Color(90, 90, 90));
-            g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
-            int lw = g2.getFontMetrics().stringWidth("last played");
-            g2.drawString("last played", panelW - lw - 16, midY - 4);
+        long   elapsed = (System.currentTimeMillis() - lastPlayedAt) / 1000;
+        String timeStr = elapsed < 60
+                ? elapsed + "s ago"
+                : (elapsed / 60) + "m ago";
 
-            g2.setColor(Color.WHITE);
-            g2.setFont(new Font("SansSerif", Font.BOLD, 18));
-            int tw = g2.getFontMetrics().stringWidth(timeStr);
-            g2.drawString(timeStr, panelW - tw - 16, midY + 14);
-        }
+        g2.setColor(new Color(90, 90, 90));
+        g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        int lw = g2.getFontMetrics().stringWidth("last played");
+        g2.drawString("last played", panelW - lw - 16, midY - 4);
 
-        g2.dispose();
+        g2.setColor(Color.WHITE);
+        g2.setFont(new Font("SansSerif", Font.BOLD, 18));
+        int tw = g2.getFontMetrics().stringWidth(timeStr);
+        g2.drawString(timeStr, panelW - tw - 16, midY + 14);
     }
 }

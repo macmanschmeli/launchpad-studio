@@ -1,6 +1,13 @@
 import javax.sound.sampled.*;
 import java.io.*;
 
+/**
+ * Wraps a single audio file for low-latency playback via SourceDataLine.
+ * Streams PCM audio on a dedicated daemon thread and emits normalized
+ * RMS amplitude values to an AmplitudeListener on each buffer chunk.
+ * Transparently transcodes MP3 and other non-PCM formats to signed PCM.
+ * Calling play() while already playing stops and restarts from startSeconds.
+ */
 public class PadSound {
 
     private AudioInputStream pcmStream;

@@ -3,6 +3,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Represents a named group of pads with a shared accent color.
+ * Owns its pad list — pads are not shared between spaces.
+ * Spaces are created and managed by SpaceManager.
+ */
 public class Space {
 
     private String id;

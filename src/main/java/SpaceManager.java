@@ -1,8 +1,16 @@
 import java.awt.Color;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
+/**
+ * Creates and owns all Space instances for the application lifetime.
+ * Assigns accent colors from a fixed palette, cycling when exhausted.
+ * Always contains at least one space — deletion is enforced by
+ * SpaceListPanel before reaching this class.
+ */
 public class SpaceManager {
+    private static SpaceManager INSTANCE;
 
     private static final Color[] SPACE_COLORS = {
             new Color(29, 158, 117),   // teal
@@ -15,9 +23,16 @@ public class SpaceManager {
     private List<Space> spaces = new ArrayList<>();
     private int colorIndex = 0;
 
-    public SpaceManager() {
+    private SpaceManager() {
         // one default space to start
-        createSpace("Default");
+        //createSpace("Default");
+    }
+    public static SpaceManager getInstance(){
+        if (INSTANCE!= null)return INSTANCE;
+        else {
+            INSTANCE= new SpaceManager();
+            return INSTANCE;
+        }
     }
 
     public Space createSpace(String name) {
@@ -28,9 +43,14 @@ public class SpaceManager {
         return space;
     }
 
+    public void addSpace(Space space){ spaces.add(space);}
+
     public void deleteSpace(Space space) {
         spaces.remove(space);
     }
 
-    public List<Space> getSpaces() { return spaces; }
+    public List<Space> getSpaces() {
+        //return spaces;
+        return Collections.unmodifiableList(spaces);
+    }
 }

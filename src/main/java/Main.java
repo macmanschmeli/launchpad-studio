@@ -16,7 +16,7 @@ public class Main {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
 
-            spaceManager = new SpaceManager();
+            spaceManager = SpaceManager.getInstance();
             visualizer   = new WaveformVisualizer();
             padArea      = new JPanel();
             mainWrapper  = new JPanel(new BorderLayout());
@@ -27,8 +27,6 @@ public class Main {
 
             // restore saved config if it exists
             restoreConfig();
-
-            JLayeredPane layered = new JLayeredPane();
 
             JPanel content = new JPanel(new BorderLayout());
             content.add(spaceListPanel, BorderLayout.WEST);
@@ -65,8 +63,6 @@ public class Main {
         if (config == null || config.spaces.isEmpty()) return;
 
         // clear the default space created by SpaceManager constructor
-        spaceManager.getSpaces().clear();
-
         for (ConfigManager.SpaceData sd : config.spaces) {
             Color color = new Color(sd.colorRgb, true);
             Space space = new Space(sd.name, color);
@@ -88,7 +84,7 @@ public class Main {
                 space.addPad(btn);
             }
 
-            spaceManager.getSpaces().add(space);
+            spaceManager.addSpace(space);
             spaceListPanel.refresh();
         }
     }

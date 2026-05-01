@@ -2,6 +2,12 @@ import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Tracks which pads belong to which named group and assigns
+ * a color to each group. Pads in the same group share a color,
+ * which is reflected in their button background.
+ * Group 0 is the default ungrouped state.
+ */
 public class GroupManager {
     // predefined group colors
     private static final Color[] GROUP_COLORS = {

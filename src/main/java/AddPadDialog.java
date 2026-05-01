@@ -4,6 +4,12 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.io.File;
 
+/**
+ * Modal dialog for creating a new pad.
+ * Collects the pad name, an optional audio file, and an optional
+ * playback start offset. Call isConfirmed() after setVisible(true)
+ * to check whether the user submitted or cancelled.
+ */
 public class AddPadDialog extends JDialog {
 
     public static class PadConfig {

@@ -3,6 +3,11 @@ import javax.swing.border.AbstractBorder;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 
+/**
+ * A custom Swing border that draws a rounded rectangle outline.
+ * Used to give space rows and other panels soft corners without
+ * overriding their paintComponent.
+ */
 public class RoundedBorder extends AbstractBorder {
 
     private int radius;
